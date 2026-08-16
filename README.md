@@ -1,6 +1,21 @@
-# yt-search-python PO-token provider adapter
+# yt-search-python PO-token Provider
 
-Standalone PO-token helper for `yt-search-python`. It is intentionally **not bundled into the main library**.
+<p align="center">
+  <a href="https://github.com/BillaSpace/ytsp-po-token-provider">
+    <img src="https://img.shields.io/badge/Python-3.9%2B-blue" alt="Python 3.9+">
+  </a>
+  <a href="https://github.com/BillaSpace/ytsp-po-token-provider">
+    <img src="https://img.shields.io/badge/API-Sync%20%2B%20Async-blue" alt="Sync and Async">
+  </a>
+  <a href="https://github.com/BillaSpace/ytsp-po-token-provider">
+    <img src="https://img.shields.io/badge/Cache-Session%20Aware-blue" alt="Session-aware cache">
+  </a>
+  <a href="https://github.com/BillaSpace/yt-search-python">
+    <img src="https://img.shields.io/badge/For-yt--search--python-blue" alt="yt-search-python">
+  </a>
+</p>
+
+Standalone PO-token helper for [`yt-search-python`](https://github.com/BillaSpace/yt-search-python). It is intentionally **not bundled into the main library**.
 
 Requires Python 3.9+ and `httpx`.
 
@@ -40,11 +55,11 @@ The provider's own `expiresAt` always wins when it expires sooner than the confi
 from ytsp_po_provider import POTokenProvider
 from youtubesearchpython import Video, StreamURLFetcher
 
-video_id='pnxL4OOzPEc'
-pot=POTokenProvider().get(video_id=video_id)
+video_id = 'pnxL4OOzPEc'
+pot = POTokenProvider().get(video_id=video_id)
 
-formats=Video.getFormats(video_id, **pot.video_kwargs())
-stream=StreamURLFetcher(**pot.stream_kwargs()).get(video_id, 18)
+formats = Video.getFormats(video_id, **pot.video_kwargs())
+stream = StreamURLFetcher(**pot.stream_kwargs()).get(video_id, 18)
 print(stream)
 ```
 
@@ -54,11 +69,11 @@ print(stream)
 from ytsp_po_provider import POTokenProvider
 from youtubesearchpython.future import Video, StreamURLFetcher
 
-video_id='pnxL4OOzPEc'
-pot=await POTokenProvider().aget(video_id=video_id)
+video_id = 'pnxL4OOzPEc'
+pot = await POTokenProvider().aget(video_id=video_id)
 
-formats=await Video.getFormats(video_id, **pot.video_kwargs())
-stream=await StreamURLFetcher(**pot.stream_kwargs()).get(video_id, 18)
+formats = await Video.getFormats(video_id, **pot.video_kwargs())
+stream = await StreamURLFetcher(**pot.stream_kwargs()).get(video_id, 18)
 print(stream)
 ```
 
@@ -67,9 +82,9 @@ print(stream)
 Either pass the cookie path explicitly:
 
 ```python
-provider=POTokenProvider(cookies_file='/root/youtube-cookies.txt')
-pot=provider.get(video_id='pnxL4OOzPEc')
-fetcher=StreamURLFetcher(**pot.stream_kwargs())
+provider = POTokenProvider(cookies_file='/root/youtube-cookies.txt')
+pot = provider.get(video_id='pnxL4OOzPEc')
+fetcher = StreamURLFetcher(**pot.stream_kwargs())
 ```
 
 or set:
@@ -82,13 +97,15 @@ export YTSP_COOKIES_FILE='/root/youtube-cookies.txt'
 
 ## Automatic refresh/cache
 
-Default maximum cache window is 24 hours, but `expiresAt` returned by the provider is respected and causes an earlier refresh. Use `bypass_cache=True` to force a fresh token:
+The default maximum cache window is 24 hours, but `expiresAt` returned by the provider is respected and causes an earlier refresh.
+
+Force a fresh token:
 
 ```python
-pot=POTokenProvider().get(video_id='pnxL4OOzPEc', bypass_cache=True)
+pot = POTokenProvider().get(video_id='pnxL4OOzPEc', bypass_cache=True)
 ```
 
-Disable local caching entirely:
+Disable local caching:
 
 ```bash
 export YTSP_POT_CACHE_HOURS='0'
@@ -97,9 +114,9 @@ export YTSP_POT_CACHE_HOURS='0'
 Clear cache:
 
 ```python
-provider=POTokenProvider()
-provider.clear_cache()                         # all
-provider.clear_cache('pnxL4OOzPEc')           # one binding
+provider = POTokenProvider()
+provider.clear_cache()
+provider.clear_cache('pnxL4OOzPEc')
 ```
 
 The cache is stored atomically and the adapter attempts to keep it owner-readable only (`0600`). Do not share cookie files or token cache files publicly.
@@ -111,3 +128,11 @@ export YTSP_POT_SCRIPT='/path/to/generate_once.js'
 ```
 
 Node is preferred when available; Deno is supported as a fallback for compatible scripts.
+
+## Related project
+
+This provider is designed for:
+
+**[`BillaSpace/yt-search-python`](https://github.com/BillaSpace/yt-search-python)**
+
+The main library handles YouTube search, metadata, playlists, recommendations, transcripts, formats and stream integration. PO-token provider/session handling stays separate in this repository.
