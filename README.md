@@ -21,6 +21,7 @@ Requires Python 3.9+ and `httpx`.
 
 It supports:
 
+- bundled local BotGuard generation through Node.js
 - persistent local `/get_pot` provider
 - optional Node/Deno script fallback
 - per-video/content-binding token cache
@@ -35,13 +36,19 @@ It does **not** store or automate a Google email/password login. For authenticat
 ## Install
 
 ```bash
-python3 -m pip install 'httpx>=0.28.1,<1.0'
+python3 -m pip install .
+```
+
+Node.js is used automatically for the bundled local generator. Systems without Node.js can install the optional Python-distributed runtime:
+
+```bash
+python3 -m pip install '.[node]'
 ```
 
 ## Environment
 
 ```bash
-export YTSP_POT_SERVER='http://127.0.0.1:4416'
+export YTSP_POT_SERVER='http://127.0.0.1:4416'         # optional; local BotGuard is the default
 export YTSP_COOKIES_FILE='/root/youtube-cookies.txt'   # optional
 export YTSP_POT_CACHE_HOURS='24'                       # optional max TTL
 export YTSP_POT_CACHE_FILE='~/.cache/ytsp-po-provider/tokens.json'

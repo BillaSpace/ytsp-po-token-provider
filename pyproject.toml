@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ytsp-po-token-provider"
+version = "0.2.0"
+description = "BotGuard-backed PO-token provider for yt-search-python"
+readme = "README.md"
+requires-python = ">=3.9"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE"]
+authors = [{name = "Prakhar Shukla"}]
+dependencies = ["httpx>=0.28.1,<1.0"]
+
+[project.optional-dependencies]
+node = ["nodejs-wheel-binaries>=22"]
+test = ["pytest>=8", "pytest-asyncio>=0.24"]
+
+[tool.setuptools.package-data]
+ytsp_po_provider = ["attestation/engine.js"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+
+[tool.ruff.lint]
+select = ["E9", "F63", "F7", "F82", "F811", "I"]

@@ -13,6 +13,8 @@ from typing import Optional
 
 import httpx
 
+_BUNDLED_ENGINE = Path(__file__).parent / "attestation" / "engine.js"
+
 
 def _env(name: str, default=None):
     value = os.getenv(name)
@@ -75,8 +77,11 @@ class POTokenProvider:
         max_cache_hours: float = None,
         refresh_margin: float = 300,
     ):
-        self.base_url = (base_url or _env("YTSP_POT_SERVER", "http://127.0.0.1:4416")).rstrip("/")
-        self.script_path = script_path or _env("YTSP_POT_SCRIPT")
+        configured_url = base_url or _env("YTSP_POT_SERVER")
+        self.base_url = configured_url.rstrip("/") if configured_url else None
+        configured_script = script_path or _env("YTSP_POT_SCRIPT")
+        self.script_path = str(Path(configured_script).expanduser()) if configured_script else str(_BUNDLED_ENGINE)
+        self._bundled_script = Path(self.script_path).resolve() == _BUNDLED_ENGINE.resolve()
         self.timeout = float(timeout)
         self.proxy = proxy or _env("YTSP_PROXY")
         self.cookies_file = cookies_file or _env("YTSP_COOKIES_FILE") or _env("YT_COOKIES_FILE")
@@ -169,6 +174,23 @@ class POTokenProvider:
             cookies_file=cookies_file,
         )
 
+    @staticmethod
+    def _runtime(node_only: bool = False) -> str:
+        try:
+            import nodejs_wheel.executable
+
+            node_path = Path(nodejs_wheel.executable.ROOT_DIR) / ("node.exe" if os.name == "nt" else "bin/node")
+            if node_path.is_file():
+                return str(node_path)
+        except (ImportError, AttributeError):
+            pass
+        runtime = shutil.which("node")
+        if not runtime and not node_only:
+            runtime = shutil.which("deno")
+        if not runtime:
+            raise RuntimeError("Node.js or Deno is required for local BotGuard token generation")
+        return runtime
+
     def _payload(self, content_binding: str = None, innertube_context: dict = None, bypass_cache: bool = False) -> dict:
         payload = {"content_binding": content_binding, "bypass_cache": bool(bypass_cache)}
         if self.proxy:
@@ -178,6 +200,8 @@ class POTokenProvider:
         return payload
 
     def _http(self, content_binding: str = None, innertube_context: dict = None, bypass_cache: bool = False) -> POToken:
+        if not self.base_url:
+            raise RuntimeError("No PO-token server configured")
         with httpx.Client(timeout=self.timeout) as client:
             response = client.post(f"{self.base_url}/get_pot", json=self._payload(content_binding, innertube_context, bypass_cache))
             response.raise_for_status()
@@ -186,28 +210,35 @@ class POTokenProvider:
     def _script(self, content_binding: str = None, innertube_context: dict = None, bypass_cache: bool = False) -> POToken:
         if not self.script_path:
             raise RuntimeError("No PO-token generation script configured")
-        runtime = shutil.which("node") or shutil.which("deno")
-        if not runtime:
-            raise RuntimeError("Neither node nor deno is available")
+        runtime = self._runtime(node_only=self._bundled_script)
         args = [runtime, self.script_path] if os.path.basename(runtime).startswith("node") else [runtime, "run", "--allow-env", "--allow-net", "--allow-read", self.script_path]
-        if content_binding:
+        if self._bundled_script:
+            if content_binding:
+                args.append(content_binding)
+        elif content_binding:
             args += ["--content-binding", content_binding]
-        if self.proxy:
-            args += ["--proxy", self.proxy]
-        if bypass_cache:
-            args.append("--bypass-cache")
-        if innertube_context:
-            args += ["--innertube-context", json.dumps(innertube_context, separators=(",", ":"))]
+        if not self._bundled_script:
+            if self.proxy:
+                args += ["--proxy", self.proxy]
+            if bypass_cache:
+                args.append("--bypass-cache")
+            if innertube_context:
+                args += ["--innertube-context", json.dumps(innertube_context, separators=(",", ":"))]
         process = subprocess.run(args, capture_output=True, text=True, timeout=self.timeout, check=False)
+        if process.returncode != 0:
+            raise RuntimeError(process.stderr.strip() or f"PO-token generator exited with status {process.returncode}")
         lines = [line.strip() for line in process.stdout.splitlines() if line.strip()]
         for line in reversed(lines):
             try:
                 return self._result(json.loads(line), self.cookies_file)
             except (json.JSONDecodeError, RuntimeError):
-                continue
+                if self._bundled_script and line:
+                    return POToken(token=line, content_binding=content_binding, cookies_file=self.cookies_file)
         raise RuntimeError(process.stderr.strip() or "PO-token generation failed")
 
     async def _ahttp(self, content_binding: str = None, innertube_context: dict = None, bypass_cache: bool = False) -> POToken:
+        if not self.base_url:
+            raise RuntimeError("No PO-token server configured")
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             response = await client.post(f"{self.base_url}/get_pot", json=self._payload(content_binding, innertube_context, bypass_cache))
             response.raise_for_status()
@@ -221,11 +252,12 @@ class POTokenProvider:
             cached = self._cached(binding)
             if cached:
                 return cached
-        try:
-            token = self._http(binding, innertube_context, bypass_cache)
-        except Exception as server_error:
-            if not self.script_path:
-                raise RuntimeError(f"PO-token server unavailable: {server_error}") from server_error
+        if self.base_url:
+            try:
+                token = self._http(binding, innertube_context, bypass_cache)
+            except (httpx.HTTPError, RuntimeError, ValueError, json.JSONDecodeError):
+                token = self._script(binding, innertube_context, bypass_cache)
+        else:
             token = self._script(binding, innertube_context, bypass_cache)
         self._store(binding, token)
         return token
@@ -238,11 +270,12 @@ class POTokenProvider:
             cached = await asyncio.to_thread(self._cached, binding)
             if cached:
                 return cached
-        try:
-            token = await self._ahttp(binding, innertube_context, bypass_cache)
-        except Exception as server_error:
-            if not self.script_path:
-                raise RuntimeError(f"PO-token server unavailable: {server_error}") from server_error
+        if self.base_url:
+            try:
+                token = await self._ahttp(binding, innertube_context, bypass_cache)
+            except (httpx.HTTPError, RuntimeError, ValueError, json.JSONDecodeError):
+                token = await asyncio.to_thread(self._script, binding, innertube_context, bypass_cache)
+        else:
             token = await asyncio.to_thread(self._script, binding, innertube_context, bypass_cache)
         await asyncio.to_thread(self._store, binding, token)
         return token
