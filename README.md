@@ -143,3 +143,5 @@ This provider is designed for:
 **[`BillaSpace/yt-search-python`](https://github.com/BillaSpace/yt-search-python)**
 
 The main library handles YouTube search, metadata, playlists, recommendations, transcripts, formats and stream integration. PO-token provider/session handling stays separate in this repository.
+
+When this provider is installed through `yt-search-python[botguard]`, the main library can use it automatically for bot-confirmation player retries and direct `StreamURLFetcher` video ID/link requests. Explicit tokens still take precedence, and automatic handling can be disabled with `auto_po_token=False`.
